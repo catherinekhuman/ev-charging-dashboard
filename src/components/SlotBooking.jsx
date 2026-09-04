@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { database } from "../firebase";
 import { ref, push } from "firebase/database";
+import { QRCodeCanvas } from "qrcode.react";
 
 function SlotBooking() {
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [message, setMessage] = useState("");
+  const [bookingId, setBookingId] = useState(null);
 
   const handleBooking = async (e) => {
     e.preventDefault();
@@ -18,7 +20,7 @@ function SlotBooking() {
 
     try {
       const bookingsRef = ref(database, "bookings");
-      await push(bookingsRef, {
+      const newBookingRef = await push(bookingsRef, {
         userName: name,
         date: date,
         time: time,
@@ -26,6 +28,7 @@ function SlotBooking() {
         createdAt: new Date().toISOString()
       });
 
+      setBookingId(newBookingRef.key);
       setMessage("Slot booked successfully!");
       setName("");
       setDate("");
@@ -66,6 +69,15 @@ function SlotBooking() {
         <button type="submit">Book Slot</button>
       </form>
       {message && <p>{message}</p>}
+
+      {bookingId && (
+        <div>
+          <h3>Your Booking QR Code</h3>
+          <QRCodeCanvas value={bookingId} size={200} />
+          <p>Booking ID: {bookingId}</p>
+          <p>Show this QR code at the charging station to authenticate.</p>
+        </div>
+      )}
     </div>
   );
 }
