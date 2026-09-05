@@ -25,11 +25,11 @@ function Signup({ onSignupSuccess }) {
       const userId = userCredential.user.uid;
 
       await set(ref(database, "users/" + userId), {
-        name: name,
-        email: email,
+        name,
+        email,
         role: "client",
-        vehicleModel: vehicleModel,
-        vehicleRegNumber: vehicleRegNumber,
+        vehicleModel,
+        vehicleRegNumber,
         createdAt: new Date().toISOString()
       });
 
@@ -39,33 +39,48 @@ function Signup({ onSignupSuccess }) {
     }
   };
 
+  const inputClass =
+    "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent";
+  const labelClass = "block text-sm font-medium text-gray-700 mb-1";
+
   return (
     <div>
-      <h2>Create Account</h2>
-      <form onSubmit={handleSignup}>
+      <h2 className="text-lg font-semibold text-gray-900 mb-1">Create your account</h2>
+      <p className="text-sm text-gray-500 mb-6">Set up your profile to start booking charging slots.</p>
+
+      <form onSubmit={handleSignup} className="space-y-4">
         <div>
-          <label>Full Name: </label>
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
+          <label className={labelClass}>Full Name</label>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
         </div>
         <div>
-          <label>Email: </label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <label className={labelClass}>Email</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
         </div>
         <div>
-          <label>Password: </label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <label className={labelClass}>Password</label>
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} />
         </div>
-        <div>
-          <label>Vehicle Model: </label>
-          <input type="text" value={vehicleModel} onChange={(e) => setVehicleModel(e.target.value)} />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelClass}>Vehicle Model</label>
+            <input type="text" value={vehicleModel} onChange={(e) => setVehicleModel(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>Reg. Number</label>
+            <input type="text" value={vehicleRegNumber} onChange={(e) => setVehicleRegNumber(e.target.value)} className={inputClass} />
+          </div>
         </div>
-        <div>
-          <label>Vehicle Registration Number: </label>
-          <input type="text" value={vehicleRegNumber} onChange={(e) => setVehicleRegNumber(e.target.value)} />
-        </div>
-        <button type="submit">Sign Up</button>
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+
+        <button
+          type="submit"
+          className="w-full bg-blue-600 text-white text-sm font-medium py-2.5 rounded-lg hover:bg-blue-700 transition"
+        >
+          Create Account
+        </button>
       </form>
-      {error && <p style={{ color: "red" }}>{error}</p>}
     </div>
   );
 }
