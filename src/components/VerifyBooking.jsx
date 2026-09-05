@@ -2,6 +2,8 @@ import { useState } from "react";
 import { database } from "../firebase";
 import { ref, get, update } from "firebase/database";
 
+const STATION_ID = "station1";
+
 function VerifyBooking() {
   const [bookingId, setBookingId] = useState("");
   const [result, setResult] = useState(null);
@@ -21,7 +23,6 @@ function VerifyBooking() {
 
       const booking = snapshot.val();
 
-      // Replay protection: reject if already active or completed
       if (booking.status === "active") {
         setResult({ type: "error", message: "This QR code has already been used to start a session." });
         return;
@@ -35,10 +36,32 @@ function VerifyBooking() {
         return;
       }
 
-      // Valid — mark as active
+      // Check station occupancy
+      const stationRef = ref(database, "stations/" + STATION_ID);
+      const stationSnapshot = await get(stationRef);
+      const station = stationSnapshot.val();
+
+      if (station && station.status === "occupied") {
+        setResult({
+          type: "error",
+          message: "Station is currently occupied by another session. Please wait."
+        });
+        return;
+      }
+
+      // Valid — start session
+      const startTime = new Date();
+      const endTime = new Date(startTime.getTime() + booking.durationMinutes * 60000);
+
       await update(bookingRef, {
         status: "active",
-        sessionStartedAt: new Date().toISOString()
+        sessionStartedAt: startTime.toISOString(),
+        sessionExpectedEndAt: endTime.toISOString()
+      });
+
+      await update(stationRef, {
+        status: "occupied",
+        currentBookingId: bookingId.trim()
       });
 
       setResult({
@@ -50,14 +73,42 @@ function VerifyBooking() {
     }
   };
 
+  const handleEndSession = async () => {
+    setResult(null);
+    try {
+      const stationRef = ref(database, "stations/" + STATION_ID);
+      const stationSnapshot = await get(stationRef);
+      const station = stationSnapshot.val();
+
+      if (!station || station.status !== "occupied" || !station.currentBookingId) {
+        setResult({ type: "error", message: "No active session to end." });
+        return;
+      }
+
+      await update(ref(database, "bookings/" + station.currentBookingId), {
+        status: "completed",
+        sessionEndedAt: new Date().toISOString()
+      });
+
+      await update(stationRef, {
+        status: "available",
+        currentBookingId: null
+      });
+
+      setResult({ type: "success", message: "Session ended. Station is now available." });
+    } catch (error) {
+      setResult({ type: "error", message: "Error ending session: " + error.message });
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-lg">
       <h2 className="text-lg font-semibold text-gray-900 mb-1">Verify Booking (Station Simulator)</h2>
       <p className="text-sm text-gray-500 mb-6">
-        This simulates the ESP32-CAM scan — paste a Booking ID to test authentication logic.
+        Simulates the ESP32-CAM scan and station occupancy behavior.
       </p>
 
-      <form onSubmit={handleVerify} className="flex gap-3">
+      <form onSubmit={handleVerify} className="flex gap-3 mb-3">
         <input
           type="text"
           value={bookingId}
@@ -72,6 +123,13 @@ function VerifyBooking() {
           Verify
         </button>
       </form>
+
+      <button
+        onClick={handleEndSession}
+        className="w-full bg-gray-100 text-gray-700 text-sm font-medium py-2 rounded-lg hover:bg-gray-200 transition"
+      >
+        Simulate: End Current Session
+      </button>
 
       {result && (
         <p className={`text-sm mt-4 ${result.type === "error" ? "text-red-600" : "text-green-600"}`}>

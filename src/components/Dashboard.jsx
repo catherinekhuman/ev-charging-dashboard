@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { database } from "../firebase";
+import { ref, onValue } from "firebase/database";
 
 function generateMockReading() {
   return {
@@ -26,7 +28,34 @@ function Dashboard() {
   const [reading, setReading] = useState(generateMockReading());
   const [totalEnergy, setTotalEnergy] = useState(0);
   const [totalCost, setTotalCost] = useState(0);
+  const [stationStatus, setStationStatus] = useState(null);
+  const [isOverrun, setIsOverrun] = useState(false);
 
+  // Effect 1: watch station + booking status for occupancy/overrun
+  useEffect(() => {
+    const stationRef = ref(database, "stations/station1");
+    const unsubscribeStation = onValue(stationRef, (snapshot) => {
+      const data = snapshot.val();
+      setStationStatus(data);
+
+      if (data && data.status === "occupied" && data.currentBookingId) {
+        const bookingRef = ref(database, "bookings/" + data.currentBookingId);
+        onValue(bookingRef, (bSnap) => {
+          const booking = bSnap.val();
+          if (booking && booking.sessionExpectedEndAt) {
+            const overrun = new Date() > new Date(booking.sessionExpectedEndAt);
+            setIsOverrun(overrun);
+          }
+        });
+      } else {
+        setIsOverrun(false);
+      }
+    });
+
+    return () => unsubscribeStation();
+  }, []);
+
+  // Effect 2: mock PZEM reading simulation
   useEffect(() => {
     const interval = setInterval(() => {
       const newReading = generateMockReading();
@@ -64,6 +93,12 @@ function Dashboard() {
           Charging Active
         </span>
       </div>
+
+      {isOverrun && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm px-4 py-3 rounded-lg">
+          This session has exceeded its expected charging duration. Station may need manual review.
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {statCard("Voltage", reading.voltage, "V")}
