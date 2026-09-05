@@ -6,6 +6,8 @@ import Signup from "./components/Signup";
 import SlotBooking from "./components/SlotBooking";
 import Dashboard from "./components/Dashboard";
 import History from "./components/History";
+import VerifyBooking from "./components/VerifyBooking";
+import { checkAndExpireBookings } from "./expiryCheck"; 
 
 function App() {
   const [user, setUser] = useState(null);
@@ -17,6 +19,9 @@ function App() {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
+      if (currentUser) {
+        checkAndExpireBookings();
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -56,6 +61,7 @@ function App() {
     { id: "booking", label: "Book a Slot" },
     { id: "dashboard", label: "Live Dashboard" },
     { id: "history", label: "History" },
+    { id: "verify", label: "Verify (Station Sim)" },
   ];
 
   return (
@@ -98,6 +104,7 @@ function App() {
         {activeTab === "booking" && <SlotBooking />}
         {activeTab === "dashboard" && <Dashboard />}
         {activeTab === "history" && <History />}
+        {activeTab === "verify" && <VerifyBooking />}
       </main>
     </div>
   );
