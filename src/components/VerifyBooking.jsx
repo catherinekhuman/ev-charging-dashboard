@@ -103,10 +103,11 @@ function VerifyBooking() {
       const session = sessionSnapshot.val();
 
       await update(ref(database, "bookings/" + station.currentBookingId), {
-        status: "completed",
-        sessionEndedAt: new Date().toISOString(),
-        totalCost: session ? session.totalCost : 0
-      });
+      status: "completed",
+      sessionEndedAt: new Date().toISOString(),
+      totalCost: session ? session.totalCost : 0,
+      paymentStatus: "pending"
+    });
 
       await update(sessionRef, {
         status: "completed",

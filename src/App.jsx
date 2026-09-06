@@ -11,6 +11,7 @@ import VerifyBooking from "./components/VerifyBooking";
 import StaffDashboard from "./components/StaffDashboard";
 import { checkAndExpireBookings } from "./expiryCheck";
 import Profile from "./components/Profile";
+import Payment from "./components/Payment";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -82,6 +83,7 @@ function App() {
     { id: "dashboard", label: "Live Dashboard" },
     { id: "history", label: "History" },
     { id: "verify", label: "Verify (Station Sim)" },
+    { id: "payment", label: "Payments" },
     { id: "profile", label: "Profile" },
   ];
 
@@ -135,6 +137,7 @@ function App() {
             {activeTab === "dashboard" && <Dashboard />}
             {activeTab === "history" && <History />}
             {activeTab === "verify" && <VerifyBooking />}
+            {activeTab === "payment" && <Payment />}
             {activeTab === "profile" && <Profile />}
           </>
         )}

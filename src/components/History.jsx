@@ -94,7 +94,15 @@ function History() {
                         {b.status}
                       </span>
                     </td>
-                    <td className="px-6 py-3 text-gray-900">{b.totalCost ? `₹${b.totalCost.toFixed(2)}` : "—"}</td>
+                    <td className="px-6 py-3 text-gray-900">
+                      {b.totalCost ? `₹${b.totalCost.toFixed(2)}` : "—"}
+                      {b.paymentStatus === "paid" && (
+                        <span className="ml-2 text-xs text-green-600 font-medium">Paid</span>
+                      )}
+                      {b.paymentStatus === "pending" && (
+                        <span className="ml-2 text-xs text-amber-600 font-medium">Unpaid</span>
+                      )}
+                    </td>
                     <td className="px-6 py-3 text-right whitespace-nowrap">
                       {b.status === "booked" && (
                         <div className="flex gap-3 justify-end">
