@@ -1,30 +1,49 @@
 import { useState, useEffect } from "react";
-import { auth } from "./firebase";
+import { auth, database } from "./firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { ref, get } from "firebase/database";
 import Login from "./components/Login";
 import Signup from "./components/Signup";
 import SlotBooking from "./components/SlotBooking";
 import Dashboard from "./components/Dashboard";
 import History from "./components/History";
 import VerifyBooking from "./components/VerifyBooking";
-import { checkAndExpireBookings } from "./expiryCheck"; 
+import StaffDashboard from "./components/StaffDashboard";
+import { checkAndExpireBookings } from "./expiryCheck";
 
 function App() {
   const [user, setUser] = useState(null);
+  const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showSignup, setShowSignup] = useState(false);
   const [activeTab, setActiveTab] = useState("booking");
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      setLoading(false);
+
       if (currentUser) {
         checkAndExpireBookings();
+        const userSnap = await get(ref(database, "users/" + currentUser.uid));
+        if (userSnap.exists()) {
+          setRole(userSnap.val().role || "client");
+        }
+      } else {
+        setRole(null);
       }
+
+      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (role === "staff") {
+      setActiveTab("staff");
+    } else if (role === "client") {
+      setActiveTab("booking");
+    }
+  }, [role]);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -57,18 +76,25 @@ function App() {
     );
   }
 
-  const tabs = [
+  const clientTabs = [
     { id: "booking", label: "Book a Slot" },
     { id: "dashboard", label: "Live Dashboard" },
     { id: "history", label: "History" },
     { id: "verify", label: "Verify (Station Sim)" },
   ];
 
+  const staffTabs = [
+    { id: "staff", label: "Overview" },
+  ];
+
+  const tabs = role === "staff" ? staffTabs : clientTabs;
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Top nav bar */}
       <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">EV Charging Dashboard</h1>
+        <h1 className="text-xl font-bold text-gray-900">
+          EV Charging {role === "staff" ? " (Staff Portal)" : "Dashboard"}
+        </h1>
         <div className="flex items-center gap-4">
           <span className="text-sm text-gray-500">{user.email}</span>
           <button
@@ -80,7 +106,6 @@ function App() {
         </div>
       </header>
 
-      {/* Tabs */}
       <nav className="bg-white border-b border-gray-200 px-6">
         <div className="flex gap-6">
           {tabs.map((tab) => (
@@ -99,12 +124,17 @@ function App() {
         </div>
       </nav>
 
-      {/* Content */}
-      <main className="max-w-3xl mx-auto px-6 py-8">
-        {activeTab === "booking" && <SlotBooking />}
-        {activeTab === "dashboard" && <Dashboard />}
-        {activeTab === "history" && <History />}
-        {activeTab === "verify" && <VerifyBooking />}
+      <main className="max-w-5xl mx-auto px-6 py-8">
+        {role === "staff" ? (
+          activeTab === "staff" && <StaffDashboard />
+        ) : (
+          <>
+            {activeTab === "booking" && <SlotBooking />}
+            {activeTab === "dashboard" && <Dashboard />}
+            {activeTab === "history" && <History />}
+            {activeTab === "verify" && <VerifyBooking />}
+          </>
+        )}
       </main>
     </div>
   );
