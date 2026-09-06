@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { database } from "../firebase";
-import { ref, get, update } from "firebase/database";
+import { ref, get, update, push, set } from "firebase/database";
 
 const STATION_ID = "station1";
 
@@ -36,32 +36,55 @@ function VerifyBooking() {
         return;
       }
 
-      // Check station occupancy
       const stationRef = ref(database, "stations/" + STATION_ID);
       const stationSnapshot = await get(stationRef);
       const station = stationSnapshot.val();
 
       if (station && station.status === "occupied") {
-        setResult({
-          type: "error",
-          message: "Station is currently occupied by another session. Please wait."
-        });
+        setResult({ type: "error", message: "Station is currently occupied by another session. Please wait." });
         return;
       }
 
-      // Valid — start session
       const startTime = new Date();
       const endTime = new Date(startTime.getTime() + booking.durationMinutes * 60000);
 
+      // Create the session record
+      const sessionsRef = ref(database, "sessions");
+      const newSessionRef = push(sessionsRef);
+      const sessionId = newSessionRef.key;
+
+      await set(newSessionRef, {
+        bookingId: bookingId.trim(),
+        userId: booking.userId,
+        userEmail: booking.userEmail,
+        stationId: STATION_ID,
+        startTime: startTime.toISOString(),
+        expectedEndTime: endTime.toISOString(),
+        endTime: null,
+        status: "in-progress",
+        liveReading: {
+          voltage: 0,
+          current: 0,
+          power: 0
+        },
+        totalEnergyKWh: 0,
+        totalCost: 0,
+        faultTriggered: false
+      });
+
+      // Update booking to reference the session
       await update(bookingRef, {
         status: "active",
+        sessionId: sessionId,
         sessionStartedAt: startTime.toISOString(),
         sessionExpectedEndAt: endTime.toISOString()
       });
 
+      // Update station
       await update(stationRef, {
         status: "occupied",
-        currentBookingId: bookingId.trim()
+        currentBookingId: bookingId.trim(),
+        currentSessionId: sessionId
       });
 
       setResult({
@@ -85,14 +108,25 @@ function VerifyBooking() {
         return;
       }
 
+      const sessionRef = ref(database, "sessions/" + station.currentSessionId);
+      const sessionSnapshot = await get(sessionRef);
+      const session = sessionSnapshot.val();
+
       await update(ref(database, "bookings/" + station.currentBookingId), {
         status: "completed",
-        sessionEndedAt: new Date().toISOString()
+        sessionEndedAt: new Date().toISOString(),
+        totalCost: session ? session.totalCost : 0
+      });
+
+      await update(sessionRef, {
+        status: "completed",
+        endTime: new Date().toISOString()
       });
 
       await update(stationRef, {
         status: "available",
-        currentBookingId: null
+        currentBookingId: null,
+        currentSessionId: null
       });
 
       setResult({ type: "success", message: "Session ended. Station is now available." });
@@ -105,7 +139,7 @@ function VerifyBooking() {
     <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-lg">
       <h2 className="text-lg font-semibold text-gray-900 mb-1">Verify Booking (Station Simulator)</h2>
       <p className="text-sm text-gray-500 mb-6">
-        Simulates the ESP32-CAM scan and station occupancy behavior.
+        Simulates the ESP32-CAM scan, session creation, and station occupancy behavior.
       </p>
 
       <form onSubmit={handleVerify} className="flex gap-3 mb-3">

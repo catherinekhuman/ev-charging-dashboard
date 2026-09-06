@@ -1,13 +1,12 @@
 import { useState, useEffect } from "react";
-import { database } from "../firebase";
-import { ref, onValue } from "firebase/database";
+import { database, auth } from "../firebase";
+import { ref, onValue, update, get, query, orderByChild, equalTo } from "firebase/database";
 
 function generateMockReading() {
   return {
-    voltage: (220 + Math.random() * 10).toFixed(1),
-    current: (2 + Math.random() * 3).toFixed(2),
-    power: (500 + Math.random() * 300).toFixed(0),
-    energy: (Math.random() * 5).toFixed(2),
+    voltage: parseFloat((220 + Math.random() * 10).toFixed(1)),
+    current: parseFloat((2 + Math.random() * 3).toFixed(2)),
+    power: parseFloat((500 + Math.random() * 300).toFixed(0)),
   };
 }
 
@@ -25,50 +24,76 @@ function getRateLabel(rate) {
 }
 
 function Dashboard() {
-  const [reading, setReading] = useState(generateMockReading());
-  const [totalEnergy, setTotalEnergy] = useState(0);
-  const [totalCost, setTotalCost] = useState(0);
-  const [stationStatus, setStationStatus] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
+  const [session, setSession] = useState(null);
   const [isOverrun, setIsOverrun] = useState(false);
+  const [noActiveSession, setNoActiveSession] = useState(false);
 
-  // Effect 1: watch station + booking status for occupancy/overrun
+  // Find the logged-in user's active session
   useEffect(() => {
-    const stationRef = ref(database, "stations/station1");
-    const unsubscribeStation = onValue(stationRef, (snapshot) => {
-      const data = snapshot.val();
-      setStationStatus(data);
+    const findActiveSession = async () => {
+      const user = auth.currentUser;
+      if (!user) return;
 
-      if (data && data.status === "occupied" && data.currentBookingId) {
-        const bookingRef = ref(database, "bookings/" + data.currentBookingId);
-        onValue(bookingRef, (bSnap) => {
-          const booking = bSnap.val();
-          if (booking && booking.sessionExpectedEndAt) {
-            const overrun = new Date() > new Date(booking.sessionExpectedEndAt);
-            setIsOverrun(overrun);
-          }
-        });
-      } else {
-        setIsOverrun(false);
+      const sessionsRef = ref(database, "sessions");
+      const activeQuery = query(sessionsRef, orderByChild("userId"), equalTo(user.uid));
+      const snapshot = await get(activeQuery);
+
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const activeEntry = Object.entries(data).find(([id, s]) => s.status === "in-progress");
+        if (activeEntry) {
+          setSessionId(activeEntry[0]);
+          setNoActiveSession(false);
+          return;
+        }
+      }
+      setNoActiveSession(true);
+    };
+
+    findActiveSession();
+    const interval = setInterval(findActiveSession, 3000); // re-check periodically in case a new session starts
+    return () => clearInterval(interval);
+  }, []);
+
+  // Listen to the session's live data
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const sessionRef = ref(database, "sessions/" + sessionId);
+    const unsubscribe = onValue(sessionRef, (snapshot) => {
+      const data = snapshot.val();
+      setSession(data);
+
+      if (data && data.expectedEndTime) {
+        setIsOverrun(new Date() > new Date(data.expectedEndTime) && data.status === "in-progress");
       }
     });
 
-    return () => unsubscribeStation();
-  }, []);
+    return () => unsubscribe();
+  }, [sessionId]);
 
-  // Effect 2: mock PZEM reading simulation
+  // Simulate PZEM readings being written into the active session every 2 seconds
   useEffect(() => {
-    const interval = setInterval(() => {
-      const newReading = generateMockReading();
-      setReading(newReading);
+    if (!sessionId || !session || session.status !== "in-progress") return;
 
+    const interval = setInterval(async () => {
+      const reading = generateMockReading();
       const rate = getRate();
-      const energyIncrement = parseFloat(newReading.energy) / 100;
-      setTotalEnergy((prev) => prev + energyIncrement);
-      setTotalCost((prev) => prev + energyIncrement * rate);
+
+      const energyIncrement = reading.power / 1000 / 1800; // rough kWh increment per 2-second tick
+      const newTotalEnergy = (session.totalEnergyKWh || 0) + energyIncrement;
+      const newTotalCost = (session.totalCost || 0) + energyIncrement * rate;
+
+      await update(ref(database, "sessions/" + sessionId), {
+        liveReading: reading,
+        totalEnergyKWh: newTotalEnergy,
+        totalCost: newTotalCost
+      });
     }, 2000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [sessionId, session]);
 
   const rate = getRate();
 
@@ -80,6 +105,23 @@ function Dashboard() {
       </p>
     </div>
   );
+
+  if (noActiveSession) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
+        <p className="text-sm text-gray-500">No active charging session right now.</p>
+        <p className="text-xs text-gray-400 mt-1">
+          Book a slot and verify your QR code at the station to start a session.
+        </p>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <p className="text-sm text-gray-500">Loading session data...</p>;
+  }
+
+  const reading = session.liveReading || { voltage: 0, current: 0, power: 0 };
 
   return (
     <div className="space-y-6">
@@ -111,7 +153,9 @@ function Dashboard() {
         <div className="grid grid-cols-3 gap-6">
           <div>
             <p className="text-xs text-gray-500">Energy Used</p>
-            <p className="text-lg font-semibold text-gray-900 mt-1">{totalEnergy.toFixed(3)} kWh</p>
+            <p className="text-lg font-semibold text-gray-900 mt-1">
+              {(session.totalEnergyKWh || 0).toFixed(3)} kWh
+            </p>
           </div>
           <div>
             <p className="text-xs text-gray-500">Tariff Rate</p>
@@ -122,7 +166,7 @@ function Dashboard() {
           </div>
           <div>
             <p className="text-xs text-gray-500">Estimated Cost</p>
-            <p className="text-lg font-semibold text-gray-900 mt-1">₹{totalCost.toFixed(2)}</p>
+            <p className="text-lg font-semibold text-gray-900 mt-1">₹{(session.totalCost || 0).toFixed(2)}</p>
           </div>
         </div>
       </div>
