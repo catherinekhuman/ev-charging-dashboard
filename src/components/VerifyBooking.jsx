@@ -48,7 +48,6 @@ function VerifyBooking() {
       const startTime = new Date();
       const endTime = new Date(startTime.getTime() + booking.durationMinutes * 60000);
 
-      // Create the session record
       const sessionsRef = ref(database, "sessions");
       const newSessionRef = push(sessionsRef);
       const sessionId = newSessionRef.key;
@@ -62,17 +61,12 @@ function VerifyBooking() {
         expectedEndTime: endTime.toISOString(),
         endTime: null,
         status: "in-progress",
-        liveReading: {
-          voltage: 0,
-          current: 0,
-          power: 0
-        },
+        liveReading: { voltage: 0, current: 0, power: 0 },
         totalEnergyKWh: 0,
         totalCost: 0,
         faultTriggered: false
       });
 
-      // Update booking to reference the session
       await update(bookingRef, {
         status: "active",
         sessionId: sessionId,
@@ -80,17 +74,13 @@ function VerifyBooking() {
         sessionExpectedEndAt: endTime.toISOString()
       });
 
-      // Update station
       await update(stationRef, {
         status: "occupied",
         currentBookingId: bookingId.trim(),
         currentSessionId: sessionId
       });
 
-      setResult({
-        type: "success",
-        message: `Access granted. Welcome, ${booking.userEmail}. Charging session started.`
-      });
+      setResult({ type: "success", message: `Access granted. Welcome, ${booking.userEmail}. Charging session started.` });
     } catch (error) {
       setResult({ type: "error", message: "Error verifying booking: " + error.message });
     }
@@ -135,11 +125,64 @@ function VerifyBooking() {
     }
   };
 
+  const handleSimulateFault = async () => {
+    setResult(null);
+    try {
+      const stationRef = ref(database, "stations/" + STATION_ID);
+      const stationSnapshot = await get(stationRef);
+      const station = stationSnapshot.val();
+
+      if (!station || station.status !== "occupied" || !station.currentSessionId) {
+        setResult({ type: "error", message: "No active session to trigger a fault on." });
+        return;
+      }
+
+      const sessionId = station.currentSessionId;
+      const bookingId = station.currentBookingId;
+
+      // Mark session as fault-stopped
+      await update(ref(database, "sessions/" + sessionId), {
+        status: "fault-stopped",
+        faultTriggered: true,
+        endTime: new Date().toISOString()
+      });
+
+      // Mark booking accordingly
+      await update(ref(database, "bookings/" + bookingId), {
+        status: "completed",
+        sessionEndedAt: new Date().toISOString(),
+        faultStopped: true
+      });
+
+      // Log the fault
+      const faultLogsRef = ref(database, "faultLogs");
+      const newLogRef = push(faultLogsRef);
+      await set(newLogRef, {
+        stationId: STATION_ID,
+        sessionId: sessionId,
+        bookingId: bookingId,
+        timestamp: new Date().toISOString(),
+        reason: "Overcurrent detected (simulated)"
+      });
+
+      // Free up the station
+      await update(stationRef, {
+        status: "available",
+        currentBookingId: null,
+        currentSessionId: null
+      });
+
+      setResult({ type: "error", message: "Fault triggered: session terminated for safety. Logged for staff review." });
+    } catch (error) {
+      setResult({ type: "error", message: "Error simulating fault: " + error.message });
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-lg">
       <h2 className="text-lg font-semibold text-gray-900 mb-1">Verify Booking (Station Simulator)</h2>
       <p className="text-sm text-gray-500 mb-6">
-        Simulates the ESP32-CAM scan, session creation, and station occupancy behavior.
+        Simulates the ESP32-CAM scan, session creation, and safety behavior.
       </p>
 
       <form onSubmit={handleVerify} className="flex gap-3 mb-3">
@@ -158,12 +201,20 @@ function VerifyBooking() {
         </button>
       </form>
 
-      <button
-        onClick={handleEndSession}
-        className="w-full bg-gray-100 text-gray-700 text-sm font-medium py-2 rounded-lg hover:bg-gray-200 transition"
-      >
-        Simulate: End Current Session
-      </button>
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={handleEndSession}
+          className="bg-gray-100 text-gray-700 text-sm font-medium py-2 rounded-lg hover:bg-gray-200 transition"
+        >
+          Simulate: End Session
+        </button>
+        <button
+          onClick={handleSimulateFault}
+          className="bg-red-50 text-red-700 text-sm font-medium py-2 rounded-lg hover:bg-red-100 transition"
+        >
+          Simulate: Fault
+        </button>
+      </div>
 
       {result && (
         <p className={`text-sm mt-4 ${result.type === "error" ? "text-red-600" : "text-green-600"}`}>

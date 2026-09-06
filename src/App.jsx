@@ -10,6 +10,7 @@ import History from "./components/History";
 import VerifyBooking from "./components/VerifyBooking";
 import StaffDashboard from "./components/StaffDashboard";
 import { checkAndExpireBookings } from "./expiryCheck";
+import Profile from "./components/Profile";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -81,6 +82,7 @@ function App() {
     { id: "dashboard", label: "Live Dashboard" },
     { id: "history", label: "History" },
     { id: "verify", label: "Verify (Station Sim)" },
+    { id: "profile", label: "Profile" },
   ];
 
   const staffTabs = [
@@ -133,6 +135,7 @@ function App() {
             {activeTab === "dashboard" && <Dashboard />}
             {activeTab === "history" && <History />}
             {activeTab === "verify" && <VerifyBooking />}
+            {activeTab === "profile" && <Profile />}
           </>
         )}
       </main>
