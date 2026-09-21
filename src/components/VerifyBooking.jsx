@@ -36,6 +36,32 @@ function VerifyBooking() {
         return;
       }
 
+      // Check if current time is within the booking's valid window
+      const now = new Date();
+      const bookingDateTime = new Date(`${booking.date}T${booking.time}`);
+      const earlyGraceMs = 10 * 60 * 1000; // allow scanning up to 10 min early
+      const lateGraceMs = 15 * 60 * 1000;  // matches no-show expiry grace period
+
+      const earliestAllowed = new Date(bookingDateTime.getTime() - earlyGraceMs);
+      const latestAllowed = new Date(bookingDateTime.getTime() + lateGraceMs);
+
+      if (now < earliestAllowed) {
+        const minutesUntil = Math.ceil((bookingDateTime.getTime() - now.getTime()) / 60000);
+        setResult({
+          type: "error",
+          message: `Too early. Your slot starts in ${minutesUntil} minute(s). Please scan closer to your booked time.`
+        });
+        return;
+      }
+
+      if (now > latestAllowed) {
+        setResult({
+          type: "error",
+          message: "This booking's time window has passed. It may have expired — please check your booking status."
+        });
+        return;
+      }
+
       const stationRef = ref(database, "stations/" + STATION_ID);
       const stationSnapshot = await get(stationRef);
       const station = stationSnapshot.val();
