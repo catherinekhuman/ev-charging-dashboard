@@ -23,3 +23,37 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Firebase credentials
+*firebase-adminsdk*.json
+firebase-service-account*.json
+*-firebase-adminsdk-*.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Arduino build files
+*.bin
+*.elf
+*.map
+*.eep
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
