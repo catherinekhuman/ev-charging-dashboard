@@ -1,14 +1,6 @@
 import { useState, useEffect } from "react";
 import { database, auth } from "../firebase";
-import { ref, onValue, update, get, query, orderByChild, equalTo } from "firebase/database";
-
-function generateMockReading() {
-  return {
-    voltage: parseFloat((220 + Math.random() * 10).toFixed(1)),
-    current: parseFloat((2 + Math.random() * 3).toFixed(2)),
-    power: parseFloat((500 + Math.random() * 300).toFixed(0)),
-  };
-}
+import { ref, onValue, get, query, orderByChild, equalTo } from "firebase/database";
 
 function getRate() {
   const hour = new Date().getHours();
@@ -28,6 +20,7 @@ function Dashboard() {
   const [session, setSession] = useState(null);
   const [isOverrun, setIsOverrun] = useState(false);
   const [noActiveSession, setNoActiveSession] = useState(false);
+  const [secondsAgo, setSecondsAgo] = useState(null);
 
   // Find the logged-in user's active session
   useEffect(() => {
@@ -36,14 +29,13 @@ function Dashboard() {
       if (!user) return;
 
       const sessionsRef = ref(database, "sessions");
-      const activeQuery = query(sessionsRef, orderByChild("userId"), equalTo(user.uid));
-      const snapshot = await get(activeQuery);
+      const userQuery = query(sessionsRef, orderByChild("userId"), equalTo(user.uid));
+      const snapshot = await get(userQuery);
 
       if (snapshot.exists()) {
-        const data = snapshot.val();
-        const activeEntry = Object.entries(data).find(([id, s]) => s.status === "in-progress");
-        if (activeEntry) {
-          setSessionId(activeEntry[0]);
+        const entry = Object.entries(snapshot.val()).find(([, s]) => s.status === "in-progress");
+        if (entry) {
+          setSessionId(entry[0]);
           setNoActiveSession(false);
           return;
         }
@@ -52,48 +44,36 @@ function Dashboard() {
     };
 
     findActiveSession();
-    const interval = setInterval(findActiveSession, 3000); // re-check periodically in case a new session starts
+    const interval = setInterval(findActiveSession, 3000);
     return () => clearInterval(interval);
   }, []);
 
-  // Listen to the session's live data
+  // Listen to that session's live data (written by the station controller)
   useEffect(() => {
     if (!sessionId) return;
-
     const sessionRef = ref(database, "sessions/" + sessionId);
     const unsubscribe = onValue(sessionRef, (snapshot) => {
       const data = snapshot.val();
       setSession(data);
-
       if (data && data.expectedEndTime) {
         setIsOverrun(new Date() > new Date(data.expectedEndTime) && data.status === "in-progress");
       }
     });
-
     return () => unsubscribe();
   }, [sessionId]);
 
-  // Simulate PZEM readings being written into the active session every 2 seconds
+  // Track how old the latest sensor reading is
   useEffect(() => {
-    if (!sessionId || !session || session.status !== "in-progress") return;
-
-    const interval = setInterval(async () => {
-      const reading = generateMockReading();
-      const rate = getRate();
-
-      const energyIncrement = reading.power / 1000 / 1800; // rough kWh increment per 2-second tick
-      const newTotalEnergy = (session.totalEnergyKWh || 0) + energyIncrement;
-      const newTotalCost = (session.totalCost || 0) + energyIncrement * rate;
-
-      await update(ref(database, "sessions/" + sessionId), {
-        liveReading: reading,
-        totalEnergyKWh: newTotalEnergy,
-        totalCost: newTotalCost
-      });
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [sessionId, session]);
+    const timer = setInterval(() => {
+      if (session && session.lastUpdate) {
+        const age = (Date.now() - new Date(session.lastUpdate).getTime()) / 1000;
+        setSecondsAgo(Math.max(0, Math.round(age)));
+      } else {
+        setSecondsAgo(null);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [session]);
 
   const rate = getRate();
 
@@ -111,7 +91,7 @@ function Dashboard() {
       <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
         <p className="text-sm text-gray-500">No active charging session right now.</p>
         <p className="text-xs text-gray-400 mt-1">
-          Book a slot and verify your QR code at the station to start a session.
+          Book a slot and scan your QR code at the station to start a session.
         </p>
       </div>
     );
@@ -123,17 +103,35 @@ function Dashboard() {
 
   const reading = session.liveReading || { voltage: 0, current: 0, power: 0 };
 
+  let sensorLabel = "Waiting for sensor";
+  let sensorStyle = "bg-gray-100 text-gray-600";
+  if (secondsAgo !== null) {
+    if (secondsAgo <= 10) {
+      sensorLabel = "Sensor live";
+      sensorStyle = "bg-green-50 text-green-700";
+    } else {
+      sensorLabel = "Sensor offline";
+      sensorStyle = "bg-amber-50 text-amber-700";
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Live Charging Dashboard</h2>
-          <p className="text-sm text-gray-500">Station 1 — real-time monitoring</p>
+          <p className="text-sm text-gray-500">
+            Station 1 — real-time monitoring
+            {secondsAgo !== null && ` — last reading ${secondsAgo}s ago`}
+          </p>
         </div>
-        <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-medium px-3 py-1.5 rounded-full">
-          <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-          Charging Active
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`text-xs font-medium px-3 py-1.5 rounded-full ${sensorStyle}`}>{sensorLabel}</span>
+          <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-medium px-3 py-1.5 rounded-full">
+            <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+            Charging Active
+          </span>
+        </div>
       </div>
 
       {isOverrun && (
@@ -154,7 +152,7 @@ function Dashboard() {
           <div>
             <p className="text-xs text-gray-500">Energy Used</p>
             <p className="text-lg font-semibold text-gray-900 mt-1">
-              {(session.totalEnergyKWh || 0).toFixed(3)} kWh
+              {(session.totalEnergyKWh || 0).toFixed(4)} kWh
             </p>
           </div>
           <div>
@@ -166,7 +164,7 @@ function Dashboard() {
           </div>
           <div>
             <p className="text-xs text-gray-500">Estimated Cost</p>
-            <p className="text-lg font-semibold text-gray-900 mt-1">₹{(session.totalCost || 0).toFixed(2)}</p>
+            <p className="text-lg font-semibold text-gray-900 mt-1">₹{(session.totalCost || 0).toFixed(3)}</p>
           </div>
         </div>
       </div>
