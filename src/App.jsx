@@ -12,6 +12,7 @@ import StaffDashboard from "./components/StaffDashboard";
 import { checkAndExpireBookings } from "./expiryCheck";
 import Profile from "./components/Profile";
 import Payment from "./components/Payment";
+import { startStationFeed } from "./stationFeed";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -46,6 +47,12 @@ function App() {
       setActiveTab("booking");
     }
   }, [role]);
+
+  useEffect(() => {
+    if (!user || role !== "client") return;
+    const stop = startStationFeed(user.uid);
+    return () => stop();
+  }, [user, role]);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -82,7 +89,7 @@ function App() {
     { id: "booking", label: "Book a Slot" },
     { id: "dashboard", label: "Live Dashboard" },
     { id: "history", label: "History" },
-    { id: "verify", label: "Verify (Station Sim)" },
+    { id: "verify", label: "Verify Booking" },
     { id: "payment", label: "Payments" },
     { id: "profile", label: "Profile" },
   ];

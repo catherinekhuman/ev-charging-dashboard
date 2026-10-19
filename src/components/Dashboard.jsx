@@ -127,6 +127,7 @@ function Dashboard() {
         </div>
         <div className="flex items-center gap-2">
           <span className={`text-xs font-medium px-3 py-1.5 rounded-full ${sensorStyle}`}>{sensorLabel}</span>
+          <span className="text-xs font-medium px-3 py-1.5 rounded-full bg-gray-100 text-gray-600">Demo (laptop charging) readings</span>
           <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-medium px-3 py-1.5 rounded-full">
             <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
             Charging Active

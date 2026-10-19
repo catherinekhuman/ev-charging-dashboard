@@ -189,7 +189,7 @@ function VerifyBooking() {
         sessionId: sessionId,
         bookingId: bookingId,
         timestamp: new Date().toISOString(),
-        reason: "Overcurrent detected (simulated)"
+        reason: "Overcurrent detected (test trigger)"
       });
 
       // Free up the station
@@ -201,15 +201,15 @@ function VerifyBooking() {
 
       setResult({ type: "error", message: "Fault triggered: session terminated for safety. Logged for staff review." });
     } catch (error) {
-      setResult({ type: "error", message: "Error simulating fault: " + error.message });
+      setResult({ type: "error", message: "Error triggering fault: " + error.message });
     }
   };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-lg">
-      <h2 className="text-lg font-semibold text-gray-900 mb-1">Verify Booking (Station Simulator)</h2>
+      <h2 className="text-lg font-semibold text-gray-900 mb-1">Verify Booking</h2>
       <p className="text-sm text-gray-500 mb-6">
-        Simulates the ESP32-CAM scan, session creation, and safety behavior.
+        Enter the booking ID from the QR code to start a charging session.
       </p>
 
       <form onSubmit={handleVerify} className="flex gap-3 mb-3">
@@ -233,13 +233,13 @@ function VerifyBooking() {
           onClick={handleEndSession}
           className="bg-gray-100 text-gray-700 text-sm font-medium py-2 rounded-lg hover:bg-gray-200 transition"
         >
-          Simulate: End Session
+          End Session
         </button>
         <button
           onClick={handleSimulateFault}
           className="bg-red-50 text-red-700 text-sm font-medium py-2 rounded-lg hover:bg-red-100 transition"
         >
-          Simulate: Fault
+          Trigger Test Fault
         </button>
       </div>
 
